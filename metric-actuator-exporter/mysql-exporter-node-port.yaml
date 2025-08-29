@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: wwwm-mysql-exporter-svc
+  labels:
+    app: wwwm-mysql-exporter
+spec:
+  type: NodePort
+  selector:
+    # 서비스가 연결할 파드의 label
+    app: wwwm-mysql
+  ports:
+    - name: metrics
+      protocol: TCP
+      port: 9104       # 서비스 자체의 포트
+      targetPort: 9104 # 파드(Exporter 컨테이너)의 포트
+      nodePort: 30914
