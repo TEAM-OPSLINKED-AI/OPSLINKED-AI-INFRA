@@ -1,0 +1,157 @@
+# bitnami 최신 Kafka 차트와 Kafka 최신 버전 (3.x 이상)에서는 KRaft 모드 사용 권장 
+
+# KRaft 모드는 ZooKeeper 없이 내장된 Raft 합의 기반 Quorum Controller로 메타데이터 관리를
+# Kafka 자체에 통합하여 아키텍처를 단순화하고 배포·관리 효율을 높인다
+# 별도의 ZooKeeper 클러스터 없이 Kafka 브로커들이 스스로 메타데이터(토픽·파티션 정보, 리더 선출 등)를 관리
+
+# KRaft 모드는 기존 ZooKeeper 클러스터와의 직접 마이그레이션이 불가능하고
+# 컨트롤러 롤링 업데이트, 버전 업/다운그레이드를 지원하지 않으며
+# 일부 인증, 스토리지 기능도 미지원되어 운영 유연성과 안정성이 제한
+kraft:
+  enabled: false
+
+# autoDiscovery Init-Container 를 쓰려면 RBAC 와 ServiceAccount 토큰 권한이 필요
+# RBAC 리소스 생성
+rbac:
+  create: true
+
+# 하지만 broker의 리소스를 아껴 전체 클러스터의 리소스 제한에 맞추기 위해
+# zookeeper 모드를 통해 Kafka 클러스터 배포
+# KRaft 모드에선 Zookeeper 비활성화
+zookeeper:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+### [TroubleShooting: SASL Error]
+# broker 정의 상단에서 진행해야 자동 주입 방지 가능
+# 인증 방식을 기본 SASL → plaintext로 변경
+auth:
+  clientProtocol: plaintext
+  interBrokerProtocol: plaintext
+  sasl:
+    # 빈 배열로 두면 SASL 완전 비활성화
+    enabledMechanisms: []
+  tls:
+    type: ""
+
+### [TroubleShooting: SASL Error]
+# 브로커는 토픽 생성 요청을 받은 뒤, 내부 ZK_BROKER(SASL)나 CLIENT 리스너로 컨트롤러에게 파티션 할당을 요청해야 함
+# 그 리스너들(SASL 9095, CLIENT 9092)은 외부에 노출되지 않아(=포워딩/NGINX 처리되지 않아) 연결이 끊기고, 결국 할당 대기 타임아웃 발생
+# Broker Pod 의 환경변수로 Kafka 설정 옵션을 넘기는 방식
+
+# 28.x 이후 Bitnami Kafka 차트는 extraEnvVars: 블록을 브로커별(server‑0,1,2) ConfigMap 이 아닌 제너릭 값으로 취급
+# 그러나 템플릿 내부에서 listeners.* 기본값을 나중에 다시 써 넣기 때문에 우리가 넣은 덮어쓰기 줄이 앞쪽에 들어가고, 뒤에 오는 디폴트가 다시 9094·9095 리스너를 살려 버림림
+# 중복을 전부 덮어쓰려면 extraConfig 를 써야 함함
+
+# EXTERNAL 리스너가 없어도 외부 접속은 충분히 가능
+# 리스너 이름의 경우 브로커 내부에서 구분용으로 붙인 라벨일 뿐 외부‑내부를 가르는 기능이 존재X
+# Bitnami 차트 기본 SASL 리스너를 완전히 덮어쓰는 환경변수
+
+### [Trouble Shooting: Timed out waiting for a node assignment]
+# Kafka는 메타데이터 기반 다단계 연결
+# 1. 클라이언트가 --bootstrap-server 로 지정한 호스트:포트에 접속 → 브로커로부터 토픽·파티션·리더 정보 등 메타데이터 수신
+# 2. 메타데이터에 담긴 advertised.listeners(호스트:포트) 정보를 이용해, 실제 데이터를 주고받을 브로커에 새로운 TCP 연결을 시도
+# 3. 이후 프로듀서/컨슈머는 이 새 연결을 통해 입출력을 수행
+# advertised.listeners에 외부에서 접근할 수 없는 내부 IP(또는 NAT IP)를 두면
+# 1단계(bootstrap)는 통과해도 2단계(메타데이터 재접속)에서 클라이언트가 잘못된 주소로 접속을 시도해 타임아웃
+extraConfig: |-
+  listener.security.protocol.map=CLIENT:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+
+extraEnvVars:
+  - name: ALLOW_PLAINTEXT_LISTENER
+    value: "yes"
+
+# 컨테이너 securityContext에 파일 시스템 권한을 위한 'fsGroup'과 'runAsUser' 권한 설정 적용
+securityContext:
+  runAsUser: 1001
+  fsGroup: 1001
+
+externalAccess:
+  enabled: true
+  autoDiscovery:
+    # 브로커가 자신의 외부 IP 자동 광고 끄기
+    # NAT 외부 호스트의 External IP를 직접 지정하기 위함
+    enabled: false
+  broker:
+    service:
+      type: NodePort
+      # 기존 bitnami 차트 설정에 맞게 EXTERNAL 포트 (9095) 명시
+      ports:
+        external: 9095
+      # 브로커 1개
+      nodePorts: [30092]
+      # [TroubleShooting: k3s 의 externalIPs hairpin/reflection 미지원 → Pod 로 가는 리턴 패킷이 날아가지 못해 세션이 끊어짐]
+      # 이 옵션을 끄면 Service는 externalIPs: 가 아닌 일반 NodePort 경로로만 동작
+      useHostIPs: false
+      # 외부 클라이언트가 연결할 Public IP
+      domain: <Host Public IP>
+
+# [__consumer_offsets 토픽 Replica 3 ERR]
+# internal topic replication factor 조정
+configuration: |-
+  offsets.topic.replication.factor=1
+  transaction.state.log.replication.factor=1
+
+broker:
+  # Pod 에 토큰 마운트
+  automountServiceAccountToken: true
+  # Bitnami Kafka 차트에서 브로커가 실제로는 9092 만 LISTEN 하는데
+  # startupProbe·readinessProbe 기본값의 문제로 Startup Probe 설정 적용이 불가
+  # 아무런 로그 없이 broker-0 Pod가 정지되고 재시작
+  # Bitnami Kafka 템플릿이 실제로 참조하는 필드는 두 곳이기에 두 곳 모두 변경
+
+  # Pod 클라이언트/내부/외부 리스너 포트 모두 정의
+  containerPorts:
+    client:   9092
+    internal: 9094
+    external: 9095
+  # 서비스/광고/외부 접근용
+  # Pod 클라이언트/내부/외부 리스너 포트 모두 정의
+  ports:
+    client:   9092
+    internal: 9094
+    external: 9095
+  # 브로커 1 개
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 300m
+      memory: 1024Mi
+    limits:
+      cpu: 600m
+      memory: 1536Mi
+  # JVM Heap 옵션을 리소스 제한 보다 낮게 설정
+  heapOpts: "-Xmx1280m -Xms1280m"
+  startupProbe:
+    enabled: true
+    failureThreshold: 120
+    periodSeconds: 10
+    # probe 에서 broker ContainerPort 번호를 직접 지정
+    tcpSocket:
+      port: client
+  readinessProbe:
+    periodSeconds: 15
+    tcpSocket:
+      port: client
+
+# # 기본값인 false 상태면 컨트롤러 설정 요구
+# defaultInitContainers:
+#   autoDiscovery:
+#     enabled: trues
+
+
+# 호스트 경로 방식의 간편한 저장소
+persistence:
+  size: 5Gi
+
+# initContainer 권한을 위해 단순 명시 필요
+controller:
+  replicaCount: 0
+  automountServiceAccountToken: true
