@@ -24,3 +24,11 @@ helm install fluent-bit fluent/fluent-bit \
   -f fluent-bit-values.yaml
 
 kubectl config set-context --current --namespace=default
+
+### [TroubleShooting]
+helm uninstall elasticsearch -n logging
+# PVC와 PV를 삭제해주어야 재설치가 정상적으로 진행됨
+k delete pvc elasticsearch-master-elasticsearch-master-0
+k delete pv pvc-279c3d08-28a8-44c8-8917-40fa51b7d9ae
+
+helm uninstall kibana -n logging

@@ -1,6 +1,6 @@
 # 단일 노드 클러스터로 설정
 replicas: 1
-minimumMasterNodes: 1
+# minimumMasterNodes: 1
 
 # 리소스 요청 및 제한
 resources:
@@ -20,3 +20,17 @@ volumeClaimTemplate:
     requests:
       # 스토리지 크기는 필요시 증설
       storage: 20Gi 
+
+# [TroubleShooting] ES 힙 메모리를 512MB로 명시적 설정
+# resources.requests.memory의 절반이 적절
+esJavaOpts: "-Xmx512m -Xms512m"
+
+# [TroubleShooting] 새로운 방식의 노드 역할 설정
+roles:
+  master: "true"
+  data: "true"
+  ingest: "true"
+  ml: "false"
+
+# [TroubleShooting] Readiness Probe 수정으로 yellow 상태 통과
+healthCheckPath: "/_cluster/health?wait_for_status=yellow"
