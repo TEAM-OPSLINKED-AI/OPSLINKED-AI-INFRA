@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-metric-producer-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-metric-producer
+  template:
+    metadata:
+      labels:
+        app: go-metric-producer
+    spec:
+      containers:
+      - name: metric-collector-container
+        image: judemin/go-metric-producer:1.0
+        imagePullPolicy: Always
+        
+        # 위에서 만든 ConfigMap의 모든 데이터를 컨테이너의 환경변수로 가져옴
+        envFrom:
+        - configMapRef:
+            name: metric-producer-config
