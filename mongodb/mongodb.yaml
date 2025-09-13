@@ -1,0 +1,101 @@
+# MongoDB 데이터를 저장하기 위한 PersistentVolume 설정
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  hostPath:
+    # 데이터를 저장할 노드의 실제 경로입니다
+    path: "/mnt/data/mongo"
+---
+# PersistentVolume을 요청하기 위한 PersistentVolumeClaim 설정
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: mongo-pv
+---
+# MongoDB root 비밀번호를 안전하게 저장하기 위한 Secret 설정
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongo-secret
+type: Opaque
+stringData:
+  # 비밀번호는 실제 배포 이전 꼭 변경할 것것
+  mongo-root-password: "<PASSWORD>"
+---
+# MongoDB Deployment 설정
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:latest
+          ports:
+            - containerPort: 27017
+          env:
+            # Secret에 저장된 root 유저 이름과 비밀번호를 환경 변수로 설정
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "root"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-secret
+                  key: mongo-root-password
+          # 리소스 사용량을 제한 MongoDB 최소 사양을 참고하여 설정
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              # 최대 리소스의 30% ~ 50% 수준으로 설정
+              memory: "768Mi" # 약 2.5GiB의 30%
+              cpu: "500m"     # 1 Core의 50%
+          volumeMounts:
+            - name: mongo-data
+              # MongoDB 데이터 저장 경로
+              mountPath: /data/db
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-pvc
+---
+# MongoDB 외부 접근을 위한 NodePort 타입의 Service 설정
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+spec:
+  type: NodePort
+  selector:
+    app: mongodb
+  ports:
+    - name: mongo
+      protocol: TCP
+      port: 27017
+      targetPort: 27017
+      nodePort: 32017
