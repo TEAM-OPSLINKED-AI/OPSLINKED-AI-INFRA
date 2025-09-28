@@ -1,0 +1,31 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: wwwm-spring-be-monitor
+  namespace: default
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: wwwm-spring-be
+  endpoints:
+  - port: http-actuator
+    path: /actuator/prometheus
+    interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: wwwm-mysql-monitor
+  namespace: default
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: wwwm-mysql
+  endpoints:
+  - port: mysql-exporter
+    path: /metrics
+    interval: 15s
