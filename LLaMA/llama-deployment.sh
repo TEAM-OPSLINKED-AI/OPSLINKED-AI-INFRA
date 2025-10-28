@@ -1,5 +1,5 @@
 # pwd
-/home/judemin/opslinked-a
+/home/judemin/opslinked-ai
 
 # vim Dockerfile
 
@@ -35,3 +35,5 @@
 # docker run -d -p 8080:8000 --name llama3-service llama3-cpu-server
 
 # docker logs -f llama3-service
+
+# sudo semanage port -a -t http_port_t -p tcp 8000
