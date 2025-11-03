@@ -37,7 +37,7 @@ metadata:
 rules:
 - apiGroups: ["apps"]
   resources: ["deployments"]
-  verbs: ["get", "list", "patch"] # RestartDeployment는 patch 권한이 필요
+  verbs: ["get", "list", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -50,7 +50,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: remediation-module-sa
-  namespace: aiops
+  namespace: default
 ---
 apiVersion: apps/v1
 kind: Deployment
