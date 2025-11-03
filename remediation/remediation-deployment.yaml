@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: remediation-module-config
+data:
+  config.yaml: |
+    log:
+      level: "info"
+    server:
+      port: 8080
+      shutdownTimeout: 15
+    smtp:
+      host: "smtp.example.com"
+      port: 587
+      username: "user@example.com"
+      # --- 비밀번호는 Secret에서 주입받으므로 여기서는 제외 ---
+      fromEmail: "aiops@example.com"
+      toEmail: "sre-team@example.com,dev-team@example.com"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: smtp-credentials
+type: Opaque
+data:
+  password: WlhoaGJYQmxZUT09
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: remediation-module-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: remediation-deploy-patcher
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "patch"] # RestartDeployment는 patch 권한이 필요
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: remediation-sa-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: remediation-deploy-patcher
+subjects:
+- kind: ServiceAccount
+  name: remediation-module-sa
+  namespace: aiops
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-module
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: remediation-module
+  template:
+    metadata:
+      labels:
+        app: remediation-module
+    spec:
+      serviceAccountName: remediation-module-sa # (B)에서 생성한 ServiceAccount
+      containers:
+      - name: remediation-module
+        image: judemin/opslinked-ai-remediation
+        ports:
+        - containerPort: 8080 # config.yaml의 서버 포트
+        env:
+        # Viper의 AutomaticEnv 기능 활용 (config.yaml 값을 덮어씀)
+        # K8s Secret을 생성하고 envFrom으로 참조하는 것을 권장
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: smtp-credentials
+              key: password
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config.yaml # Viper가 config.yaml을 찾을 경로
+          subPath: config.yaml
+      volumes:
+      - name: config-volume
+        configMap:
+          name: remediation-module-config # (A)에서 생성한 ConfigMap
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: remediation-module-svc
+spec:
+  type: NodePort
+  selector:
+    app: remediation-module
+  ports:
+  - protocol: TCP
+    port: 80 # 서비스가 노출할 포트
+    targetPort: 8080 # Pod의 컨테이너 포트
+    nodePort: 32563

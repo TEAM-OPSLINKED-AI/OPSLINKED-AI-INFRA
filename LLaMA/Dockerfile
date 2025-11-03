@@ -24,6 +24,6 @@ RUN python3 -c "from huggingface_hub import hf_hub_download; import os; hf_hub_d
 # 8. API 서버 포트 노출
 EXPOSE 8000
 
-# 9. (Changed) 컨테이너 실행 명령 (CMD)
+# 9. 컨테이너 실행 명령 (CMD)
 #    환경 변수(${HF_FILE}) 치환을 위해 /bin/sh -c (shell form) 사용
 CMD ["/bin/sh", "-c", "python3 -m llama_cpp.server --model /app/models/${HF_FILE} --n_gpu_layers 0 --host 0.0.0.0 --port 8000"]
