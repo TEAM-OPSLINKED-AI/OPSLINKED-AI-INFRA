@@ -13,10 +13,8 @@ data:
       # --- Changed: 네이버 SMTP 정보로 변경 ---
       host: "smtp.naver.com"
       port: 587
-      username: "judemin2087@naver.com" # 스크린샷의 아이디(judemin2087) 기준
-      # --- 비밀번호는 Secret에서 주입받으므로 여기서는 제외 ---
-      fromEmail: "judemin2087@naver.com" # 발신자 이메일 (보통 username과 동일)
-      # --- Changed: 이전 요청에 따라 수신자 목록에 네이버 메일 추가 ---
+      username: "judemin2087"
+      fromEmail: "judemin2087@naver.com"
       toEmail: "judemin2087@naver.com"
 ---
 apiVersion: v1
@@ -78,15 +76,13 @@ spec:
       labels:
         app: remediation-module
     spec:
-      serviceAccountName: remediation-module-sa # (B)에서 생성한 ServiceAccount
+      serviceAccountName: remediation-module-sa
       containers:
       - name: remediation-module
         image: judemin/opslinked-ai-remediation
         ports:
-        - containerPort: 8080 # config.yaml의 서버 포트
+        - containerPort: 8080
         env:
-        # Viper의 AutomaticEnv 기능 활용 (config.yaml 값을 덮어씀)
-        # K8s Secret을 생성하고 envFrom으로 참조하는 것을 권장
         - name: SMTP_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -94,12 +90,13 @@ spec:
               key: password
         volumeMounts:
         - name: config-volume
-          mountPath: /app/config.yaml # Viper가 config.yaml을 찾을 경로
+          # /app/config.yaml 에서 /config.yaml 로 수정
+          mountPath: /config.yaml
           subPath: config.yaml
       volumes:
       - name: config-volume
         configMap:
-          name: remediation-module-config # (A)에서 생성한 ConfigMap
+          name: remediation-module-config
 ---
 apiVersion: v1
 kind: Service
