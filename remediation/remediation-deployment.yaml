@@ -12,8 +12,8 @@ data:
     smtp:
       # --- Changed: 네이버 SMTP 정보로 변경 ---
       host: "smtp.naver.com"
-      port: 465 # SSL을 사용하도록 포트 변경경
-      username: "judemin2087"
+      port: 587
+      username: "judemin2087@naver.com"
       fromEmail: "judemin2087@naver.com"
       toEmail: "judemin2087@naver.com"
 ---
